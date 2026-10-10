@@ -1,3 +1,7 @@
+Region 3 Maintenance — v4
+
+Visible sections: Dashboard, Fleet Maintenance, Work Orders, Supply Requests. Equipment Inventory and Reports are hidden for a later phase. Existing data fields are retained for compatibility. No login.
+
 # Region 3 Fleet Maintenance — No Login
 
 A standalone Node.js website for Tennessee Rural Service Patrol Region 3.
@@ -20,3 +24,10 @@ This app intentionally has **no authentication**. Anyone with access to the publ
 
 ## Run locally
 `npm start`, then visit http://localhost:3000.
+
+
+## Version 3 navigation
+The homepage now opens to a clickable Dashboard. Top navigation tabs and Dashboard section cards open Fleet Maintenance, Work Orders, Equipment Inventory, Supply Requests, and Reports & Backups. No login is required.
+
+## Deploy
+Extract this ZIP and upload the files (not the ZIP itself) to the root of the GitHub repository on the branch connected to Railway, then commit. Railway should deploy the new commit. Configure a persistent Railway volume mounted at /app/data and DATA_DIR=/app/data to retain records through deployments. Existing JSON records in that directory are preserved by this update. Do not upload the data directory to GitHub.
