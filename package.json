@@ -1,0 +1,1 @@
+{"name":"region3-maintenance","version":"1.0.0","type":"module","scripts":{"start":"node server.js"},"dependencies":{"bcryptjs":"^2.4.3","dotenv":"^16.4.5","express":"^4.21.2","express-session":"^1.18.1","connect-pg-simple":"^10.0.0","pg":"^8.13.1"},"engines":{"node":">=20"}}
