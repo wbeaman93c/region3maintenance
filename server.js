@@ -1,30 +1,10 @@
-import express from 'express';
-import fs from 'node:fs';
-import path from 'node:path';
-import {fileURLToPath} from 'node:url';
-const app=express(); app.use(express.json({limit:'100kb'}));
-const root=path.dirname(fileURLToPath(import.meta.url));
-const store=process.env.DATA_FILE || path.join(root,'data.json');
-const initial=()=>({vehicles:Array.from({length:24},(_,i)=>({unit:8300+i,mileage:0,last_oil_mileage:null,status:'Operational',notes:''})),work_orders:[],services:[],equipment_requests:[],inventory:[]});
-let db;try{db=JSON.parse(fs.readFileSync(store,'utf8'))}catch{db=initial()}
-const save=()=>{fs.mkdirSync(path.dirname(store),{recursive:true});fs.writeFileSync(store,JSON.stringify(db,null,2))};
-const ok=(res,value)=>res.json(value);const fail=(res,msg)=>res.status(400).json({error:msg});
-const unit=n=>Number.isInteger(+n)&&+n>=8300&&+n<=8323;
-const getV=n=>db.vehicles.find(v=>v.unit===+n);
-const nextId=a=>Math.max(0,...a.map(x=>x.id))+1;
-app.get('/api/vehicles',(req,res)=>ok(res,db.vehicles.map(v=>({...v,next_oil_mileage:v.last_oil_mileage==null?null:v.last_oil_mileage+5000,oil_status:v.last_oil_mileage==null?'Unknown':v.mileage>=v.last_oil_mileage+5000?'Due / Overdue':v.mileage>=v.last_oil_mileage+4500?'Due Soon':'Current'}))));
-app.patch('/api/vehicles/:unit',(req,res)=>{const v=getV(req.params.unit);if(!v)return fail(res,'Invalid unit');const {mileage,status,notes}=req.body;if(mileage!==undefined&&(!Number.isInteger(+mileage)||+mileage<v.mileage))return fail(res,'Odometer must not decrease');if(status!==undefined&&!['Operational','Out of Service','In Maintenance'].includes(status))return fail(res,'Invalid status');if(mileage!==undefined)v.mileage=+mileage;if(status!==undefined)v.status=status;if(notes!==undefined)v.notes=String(notes);save();ok(res,v)});
-app.get('/api/work-orders',(req,res)=>ok(res,[...db.work_orders].reverse()));
-app.post('/api/work-orders',(req,res)=>{const {unit,title,description='',priority='Normal'}=req.body;if(!unit||!getV(unit)||!String(title||'').trim())return fail(res,'Unit and issue required');const x={id:nextId(db.work_orders),unit:+unit,title,description,priority,status:'Open',created_at:new Date().toISOString()};db.work_orders.push(x);save();ok(res,x)});
-app.patch('/api/work-orders/:id',(req,res)=>{const x=db.work_orders.find(x=>x.id===+req.params.id);if(!x)return fail(res,'Work order not found');if(!['Open','In Progress','Waiting on Parts','Completed'].includes(req.body.status))return fail(res,'Invalid status');x.status=req.body.status;x.completed_at=x.status==='Completed'?new Date().toISOString():null;save();ok(res,x)});
-app.get('/api/services',(req,res)=>ok(res,[...db.services].reverse()));
-app.post('/api/services',(req,res)=>{const {unit,service_type,mileage,notes=''}=req.body;const v=getV(unit);if(!v||!service_type||!Number.isInteger(+mileage)||+mileage<v.mileage)return fail(res,'Check unit and odometer (cannot decrease)');const x={id:nextId(db.services),unit:+unit,service_type,mileage:+mileage,notes,created_at:new Date().toISOString()};db.services.push(x);v.mileage=+mileage;if(service_type==='Oil Change')v.last_oil_mileage=+mileage;save();ok(res,x)});
-app.get('/api/equipment',(req,res)=>ok(res,[...db.equipment_requests].reverse()));
-app.post('/api/equipment',(req,res)=>{const {unit,item,quantity,request_type='Replacement',details=''}=req.body;if(!getV(unit)||!String(item||'').trim()||!Number.isInteger(+quantity)||+quantity<1)return fail(res,'Check equipment request');const x={id:nextId(db.equipment_requests),unit:+unit,item,quantity:+quantity,request_type,details,status:'Requested',created_at:new Date().toISOString()};db.equipment_requests.push(x);save();ok(res,x)});
-app.patch('/api/equipment/:id',(req,res)=>{const x=db.equipment_requests.find(x=>x.id===+req.params.id);if(!x)return fail(res,'Request not found');if(!['Requested','Approved','Ordered','Received','Denied'].includes(req.body.status))return fail(res,'Invalid status');x.status=req.body.status;save();ok(res,x)});
-app.post('/api/inventory',(req,res)=>{const {item,quantity,notes=''}=req.body;if(!String(item||'').trim()||!Number.isInteger(+quantity)||+quantity<0)return fail(res,'Check inventory');let x=db.inventory.find(x=>x.item===item);if(x){x.quantity=+quantity;x.notes=notes}else{ x={id:nextId(db.inventory),item,quantity:+quantity,notes};db.inventory.push(x)}save();ok(res,x)});
-app.get('/api/users',(req,res)=>ok(res,[]));
-app.get('/api/inventory',(req,res)=>ok(res,db.inventory));
-app.use(express.static(path.join(root,'public')));
-app.get('*',(req,res)=>res.sendFile(path.join(root,'public','index.html')));
-app.listen(process.env.PORT||3000,'0.0.0.0',()=>console.log('Region 3 dashboard ready - no login or database connection required'));
+const http=require('http'),fs=require('fs'),path=require('path');
+const PORT=process.env.PORT||3000, DATA=process.env.DATA_DIR||path.join(__dirname,'data'), FILE=path.join(DATA,'records.json');
+const defaults={vehicles:Array.from({length:24},(_,i)=>({unit:8300+i,mileage:0,lastOil:0,notes:''})),workOrders:[],equipment:[],orders:[]};
+function load(){try{return JSON.parse(fs.readFileSync(FILE,'utf8'))}catch{return structuredClone(defaults)}}
+function save(data){fs.mkdirSync(DATA,{recursive:true});fs.writeFileSync(FILE+'.tmp',JSON.stringify(data,null,2));fs.renameSync(FILE+'.tmp',FILE)}
+function send(res,code,obj){res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(obj))}
+const types={'html':'text/html','css':'text/css','js':'application/javascript','png':'image/png','svg':'image/svg+xml'};
+http.createServer((req,res)=>{const url=new URL(req.url,'http://localhost');if(url.pathname==='/api/data'){
+ if(req.method==='GET')return send(res,200,load());if(req.method==='PUT'){let raw='';req.on('data',b=>{raw+=b;if(raw.length>2000000)req.destroy()});req.on('end',()=>{try{let v=JSON.parse(raw);if(!v||!Array.isArray(v.vehicles)||!Array.isArray(v.workOrders)||!Array.isArray(v.equipment)||!Array.isArray(v.orders))throw Error('Invalid data');save(v);send(res,200,{ok:true})}catch(e){send(res,400,{error:e.message})}});return}return send(res,405,{error:'Method not allowed'})}
+ if(req.method!=='GET')return send(res,405,{error:'Method not allowed'});let name=url.pathname==='/'?'index.html':url.pathname.slice(1);let file=path.resolve(__dirname,'public',name);if(!file.startsWith(path.resolve(__dirname,'public')+path.sep))return send(res,403,{error:'Forbidden'});fs.readFile(file,(err,bytes)=>{if(err){res.writeHead(404);return res.end('Not found')}res.writeHead(200,{'Content-Type':types[path.extname(file).slice(1)]||'application/octet-stream'});res.end(bytes)})}).listen(PORT,'0.0.0.0',()=>console.log('Region 3 maintenance listening on '+PORT));

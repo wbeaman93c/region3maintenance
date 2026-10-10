@@ -1,1 +1,1 @@
-{"name":"region3-maintenance-direct","version":"2.0.0","type":"module","scripts":{"start":"node server.js"},"dependencies":{"express":"^4.21.2"},"engines":{"node":">=20"}}
+{"name":"region3maintenance","version":"2.0.0","private":true,"scripts":{"start":"node server.js"},"engines":{"node":">=18"}}
